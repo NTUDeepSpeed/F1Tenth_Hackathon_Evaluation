@@ -11,7 +11,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 import numpy as np
 
 # from gap_finder.pid import PID
-from pid import PID
+from evaluation.pid import PID
 
 # reference: https://github.com/f1tenth/f1tenth_labs_openrepo/blob/main/f1tenth_lab4/README.md
 # reference: https://www.nathanotterness.com/2019/04/the-disparity-extender-algorithm-and.html

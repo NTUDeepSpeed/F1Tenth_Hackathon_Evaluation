@@ -25,6 +25,7 @@ setup(
         'console_scripts': [
             'evaluation = evaluation.evaluation:main',
             'wall_follow = evaluation.wall_follow:main',
+            'gap_finder_base = evaluation.gap_finder_base:main',
         ],
     },
 )

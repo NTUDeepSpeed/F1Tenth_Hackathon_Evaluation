@@ -13,8 +13,10 @@ class Evaluation(Node):
         super().__init__('evaluation')
 
         # Parameters
-        self.start_point = Point(x=-1.91, y=0.62, z=0.0)  # Start point of the line
-        self.end_point = Point(x=-0.75, y=-1.86, z=0.0)    # End point of the line
+        #self.start_point = Point(x=-1.91, y=0.62, z=0.0)  # Start point of the line
+        self.start_point = Point(x=0.6, y=3.0, z=0.0)  # Start point of the line
+        self.end_point = Point(x=3.8, y=-1.0, z=0.0)    # End point of the line
+        #self.end_point = Point(x=-0.75, y=-1.86, z=0.0)    # End point of the line
         self.car_position = None  # Current car position
         self.prev_position = None  # Previous car position
         self.current_lap_count = 0
@@ -23,7 +25,7 @@ class Evaluation(Node):
         self.crashed_time = time.time()
         self.crash_detected = False
         self.evaluation_start_time = time.time()
-        self.evaluation_duration = 600  # 10 minutes in seconds
+        self.evaluation_duration = 600 # 10 minutes in seconds
         self.curr_time = time.time()
         self.fastest_lap_time = float('inf')
 
@@ -104,7 +106,9 @@ class Evaluation(Node):
         # Check for collisions
         linear_velocity = msg.twist.twist.linear.x
         crash_threshold = 0.01  # Velocity near zero
-        if linear_velocity < crash_threshold:
+        time_since_start = time.time() - self.evaluation_start_time
+        # Handle crash detected at the beginning when the velocity is zero
+        if linear_velocity < crash_threshold and time_since_start > 3.0:
             self.reset()
 
         self.crashed_elapsed_time = time.time() - self.crashed_time
@@ -122,7 +126,10 @@ class Evaluation(Node):
                 prev_time = self.curr_time
                 self.curr_time = time.time()
                 self.elapsed_time = self.curr_time - prev_time
-                self.fastest_lap_time = min(self.elapsed_time, self.fastest_lap_time)
+                # Only update fastest lap if we have completed at least ONE full lap
+                # Lap 1 is just the run-up from spawn to start line.
+                if self.current_lap_count > 1:
+                    self.fastest_lap_time = min(self.elapsed_time, self.fastest_lap_time)
 
                 self.get_logger().info(f"Current total laps: {self.current_lap_count} | Current Lap Time: {self.elapsed_time} | Consecutive Laps: {self.consecutive_laps} | Fastest Lap Time: {self.fastest_lap_time}")
 
