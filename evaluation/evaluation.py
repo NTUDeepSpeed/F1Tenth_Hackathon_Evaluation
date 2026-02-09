@@ -13,10 +13,8 @@ class Evaluation(Node):
         super().__init__('evaluation')
 
         # Parameters
-        #self.start_point = Point(x=-1.91, y=0.62, z=0.0)  # Start point of the line
-        self.start_point = Point(x=0.6, y=3.0, z=0.0)  # Start point of the line
-        self.end_point = Point(x=3.8, y=-1.0, z=0.0)    # End point of the line
-        #self.end_point = Point(x=-0.75, y=-1.86, z=0.0)    # End point of the line
+        self.start_point = Point(x=-1.91, y=0.62, z=0.0)  # Start point of the line
+        self.end_point = Point(x=-0.75, y=-1.86, z=0.0)    # End point of the line
         self.car_position = None  # Current car position
         self.prev_position = None  # Previous car position
         self.current_lap_count = 0
@@ -126,10 +124,7 @@ class Evaluation(Node):
                 prev_time = self.curr_time
                 self.curr_time = time.time()
                 self.elapsed_time = self.curr_time - prev_time
-                # Only update fastest lap if we have completed at least ONE full lap
-                # Lap 1 is just the run-up from spawn to start line.
-                if self.current_lap_count > 1:
-                    self.fastest_lap_time = min(self.elapsed_time, self.fastest_lap_time)
+                self.fastest_lap_time = min(self.elapsed_time, self.fastest_lap_time)
 
                 self.get_logger().info(f"Current total laps: {self.current_lap_count} | Current Lap Time: {self.elapsed_time} | Consecutive Laps: {self.consecutive_laps} | Fastest Lap Time: {self.fastest_lap_time}")
 
