@@ -23,7 +23,7 @@ class Evaluation(Node):
         self.crashed_time = time.time()
         self.crash_detected = False
         self.evaluation_start_time = time.time()
-        self.evaluation_duration = 600  # 10 minutes in seconds
+        self.evaluation_duration = 600 # 10 minutes in seconds
         self.curr_time = time.time()
         self.fastest_lap_time = float('inf')
 
@@ -104,7 +104,9 @@ class Evaluation(Node):
         # Check for collisions
         linear_velocity = msg.twist.twist.linear.x
         crash_threshold = 0.01  # Velocity near zero
-        if linear_velocity < crash_threshold:
+        time_since_start = time.time() - self.evaluation_start_time
+        # Handle crash detected at the beginning when the velocity is zero
+        if linear_velocity < crash_threshold and time_since_start > 3.0:
             self.reset()
 
         self.crashed_elapsed_time = time.time() - self.crashed_time
