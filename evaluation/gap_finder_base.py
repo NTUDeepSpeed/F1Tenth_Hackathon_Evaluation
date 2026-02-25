@@ -43,7 +43,7 @@ class GapFinderAlgorithm:
         view_angle=3.142,
         coeffiecient_of_friction=0.71,
         disparity_threshold=0.6,
-        lookahead=None,
+        lookahead=3.0,
         speed_kp=1.0,
         steering_kp=1.2,
         wheel_base=0.324,
@@ -55,26 +55,27 @@ class GapFinderAlgorithm:
         bin_number=7,
     ):
         # Tunable Parameters
-        self.disparity_bubble_diameter = disparity_bubble_diameter  # [m]
-        self.safety_bubble_diameter = safety_bubble_diameter  # [m]
-        self.front_bubble_diameter = front_bubble_diameter
-        self.minimum_bubble_diameter = minimum_bubble_diameter
-        self.view_angle = view_angle  # [rad]
+        self.disparity_bubble_diameter = disparity_bubble_diameter =0.28 [m]
+        self.safety_bubble_diameter = safety_bubble_diameter = 0.8 # [m]
+        self.front_bubble_diameter = front_bubble_diameter = 0.25
+        self.minimum_bubble_diameter = minimum_bubble_diameter = 0.22
+        self.view_angle = view_angle = 3.14  # [rad]
         self.coeffiecient_of_friction = coeffiecient_of_friction
-        self.lookahead = lookahead  # [m]
-        self.disparity_threshold = disparity_threshold  # [m]
+        self.lookahead = 5.5 #[m]
+        self.disparity_threshold = disparity_threshold = 0.5 # [m]
         self.wheel_base = wheel_base  # [m]
-        self.speed_max = speed_max  # [m/s]
-        self.speed_min = speed_min
+        self.speed_max = speed_max = 10.5 # [m/s]
+        self.speed_min = speed_min = 1.2
         self.front_bubble_diameter = front_bubble_diameter
-        self.bin_number = bin_number
-        self.speed_low_pass_filter = speed_low_pass_filter
-        self.steering_low_pass_filter = steering_low_pass_filter
+        self.bin_number = bin_number = 8
+        self.speed_low_pass_filter = speed_low_pass_filter = 0.7
+        self.steering_low_pass_filter = steering_low_pass_filter = 0.75
         # Controller Parameters
-        self.speed_pid = PID(Kp=-speed_kp)
-        self.speed_pid.set_point = 0.0
-        self.steering_pid = PID(Kp=-steering_kp)
+        self.speed_pid = PID(Kp=0.9,Ki=0.0, Kd = 0.0)
+        self.speed_pid.set_point = self.speed_max
+        self.steering_pid = PID(Kp=1.5, Ki = 0.0, Kd=0.12)
         self.steering_pid.set_point = 0.0
+        
         # Feature Activation
         self.do_mark_sides = True
         self.do_min_filter = True
@@ -95,10 +96,17 @@ class GapFinderAlgorithm:
         self.middle_index = None
         self.last_speed = 0.0
         self.last_steering = 0.0
+        
 
     def update(self, scan_msg):
         ranges = np.array(scan_msg.ranges)
         angle_increment = scan_msg.angle_increment
+
+        # --- Compute front clearance early for alignment ---
+        middle_index = ranges.shape[0] // 2
+        front_clearance = ranges[middle_index]
+        if front_clearance == 0.0:
+            front_clearance = np.min(ranges)  # fallback if LIDAR returns 0
 
         if self.initialise:
             # lookahead
@@ -111,13 +119,36 @@ class GapFinderAlgorithm:
             lower_bound = int((ranges.shape[0] - view_angle_count) / 2)
             upper_bound = int(lower_bound + view_angle_count)
             self.fov_bounds = [lower_bound, upper_bound + 1]
-            # center priority mask
-            ranges_right = ranges[lower_bound : self.middle_index]
-            ranges_left = ranges[self.middle_index : upper_bound + 1]
-            mask_right = np.linspace(0.999, 1.0, ranges_right.shape[0])
-            mask_left = np.linspace(1.0, 0.999, ranges_left.shape[0])
-            self.center_priority_mask = np.concatenate((mask_right, mask_left))
+             #center priority mask
+            #anges_right = ranges[lower_bound : self.middle_index]
+            #anges_left = ranges[self.middle_index : upper_bound + 1]
+            #ask_right = np.linspace(0.95, 1.0, ranges_right.shape[0])
+            #ask_left = np.linspace(1.0, 0.95, ranges_left.shape[0])
+            #elf.center_priority_mask = np.concatenate((mask_right, mask_left))
+            self.center_priority_mask = np.ones(1000)
             self.initialise = False
+        # --- AUTO-YAW CORRECTION FOR INITIAL SPAWN ---
+        #if not hasattr(self, "spawn_aligned"):
+            #self.spawn_aligned = False
+            #self.spawn_timer = 0.0
+
+        #if not self.spawn_aligned:
+        # Estimate heading based on left/right LiDAR average
+            #left_mean = np.mean(ranges[:self.middle_index])
+            #right_mean = np.mean(ranges[self.middle_index:])
+    
+        # Simple proportional steering to center the car
+            #alignment_steering = 0.5 * (left_mean - right_mean)  # tweak 0.5 if needed
+            #alignment_speed = min(self.speed_max * 0.5, front_clearance)  # slow while aligning
+    
+            # Mark as done if roughly centered
+            #if abs(left_mean - right_mean) < 0.05:  # 5 cm tolerance
+                #self.spawn_aligned = True
+    
+                # Return early with alignment command
+            #self.last_speed = alignment_speed
+            #self.last_steering = alignment_steering
+            #return {"speed": alignment_speed, "steering": alignment_steering}
 
         ### LIMIT LOOKAHEAD ##
         if self.do_limit_lookahead:
@@ -169,7 +200,6 @@ class GapFinderAlgorithm:
                         r = limited_ranges[i]
                         arc = angle_increment * r
                     else:
-                        i -= i
                         r = limited_ranges[i - 1]
                     arc = angle_increment * r
                     radius_count = int(self.disparity_bubble_diameter / arc / 2)
@@ -194,8 +224,24 @@ class GapFinderAlgorithm:
             limited_modified_ranges[mark_point[0] : mark_point[1]] = mark_point[2]
 
         ### PRIORITISE CENTER OF SCAN ###
-        limited_modified_ranges *= self.center_priority_mask
+        limited_modified_ranges *= self.center_priority_mask 
+        # --- Dynamic lookahead and corner speed scaling ---
+        min_range = np.min(limited_ranges)
 
+        # scale down speed for tight corners
+        if min_range < 1.8:          # narrow gap -> slow down
+            speed_factor = 0.45       # aggressive slow
+            self.lookahead = 2.5     # reduce lookahead to avoid oversteer
+        elif min_range < 3.0:
+            speed_factor = 0.75
+            self.lookahead = 3.8
+        else:
+            speed_factor = 1.05       # straight -> full speed
+            self.lookahead = 5.5
+
+        # apply speed scaling
+        init_speed = (front_clearance / self.lookahead) * self.speed_max * speed_factor
+        speed = self.speed_pid.update(init_speed)
         ### FIND DEEPEST GAP ###
         max_gap_index = np.argmax(limited_modified_ranges)
         goal_bearing = angle_increment * (max_gap_index - limited_ranges.shape[0] // 2)
@@ -205,10 +251,21 @@ class GapFinderAlgorithm:
             goal_bearing * self.wheel_base
         )  # using ackermann steering model
         steering = self.steering_pid.update(init_steering)
+        
 
         # init_speed = np.sqrt(10 * self.coeffiecient_of_friction * self.wheel_base / np.abs(max(np.tan(abs(steering)),1e-16)))
         # init_speed = front_clearance/self.lookahead * min(init_speed, self.speed_max)
-        init_speed = front_clearance / self.lookahead * self.speed_max
+        #init_speed = front_clearance / self.lookahead * self.speed_max
+        curvature = abs(steering)
+
+        if curvature < 0.12:
+            init_speed = self.speed_max
+        elif curvature < 0.28:
+            init_speed = 0.9 * self.speed_max
+        elif curvature < 0.5:
+            init_speed = 0.75 * self.speed_max
+        else:
+            init_speed = 0.55 * self.speed_max
         speed = self.speed_pid.update(init_speed)
 
         ### BIN SPEED ###
@@ -220,17 +277,17 @@ class GapFinderAlgorithm:
                     break
 
         ### LOW PASS FILTER ###
-        # if self.do_speed_low_pass_filter:
-        #     speed = (
-        #         self.speed_low_pass_filter * speed
-        #         + (1 - self.speed_low_pass_filter) * self.last_speed
-        #     )
-        # if self.do_steering_low_pass_filter:
-        #     speed = (
-        #         self.steering_low_pass_filter * steering
-        #         + (1 - self.steering_low_pass_filter) * self.last_steering
-        #     )
-        #
+        if self.do_speed_low_pass_filter:
+            speed = (
+                self.speed_low_pass_filter * speed
+                + (1 - self.speed_low_pass_filter) * self.last_speed
+            )
+        if self.do_steering_low_pass_filter:
+            steering = (
+                self.steering_low_pass_filter * steering
+                + (1 - self.steering_low_pass_filter) * self.last_steering
+            )
+        
         self.last_speed = speed
         self.last_steering = steering
 
@@ -298,7 +355,7 @@ class GapFinderNode(Node):
         # Acceleration limits
         self.max_acceleration = None  # [m/s^2]
         # Steering limits
-        self.max_steering = 0.5  # [rad]
+        self.max_steering = 0.75  # [rad]
 
         ### GAP FINDER ALGORITHM ###
         self.gapFinderAlgorithm = GapFinderAlgorithm(
@@ -320,6 +377,7 @@ class GapFinderNode(Node):
             visualise=True,
             bin_number=7,
         )
+        
 
         ### ROS2 NODE ###
         super().__init__("gap_finder")
@@ -342,6 +400,8 @@ class GapFinderNode(Node):
             self.init_visualisation()
         # Timer
         self.timer = self.create_timer(1 / self.hz, self.timer_callback)
+
+    
 
     def init_visualisation(self):
         # Safety Viz Publisher
@@ -380,10 +440,12 @@ class GapFinderNode(Node):
             + self.get_clock().now().to_msg().nanosec * 1e-9
         )
 
-    def scan_callback(self, scan_msg):
+    def scan_callback(self,scan_msg):
         self.scan_ready = True
         self.scan_msg = scan_msg
         self.last_scan_time = self.get_time()
+         
+
 
     def publish_drive_msg(self, drive={"speed": 0.0, "steering": 0.0}):
         self.drive_msg.drive.speed = float(drive["speed"])

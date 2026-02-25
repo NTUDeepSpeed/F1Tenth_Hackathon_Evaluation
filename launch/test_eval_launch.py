@@ -5,7 +5,7 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='evaluation',
-            executable='wall_follow',
+            executable='gap_finder_base',
         ),
         Node(
             package='evaluation',
